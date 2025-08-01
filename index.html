@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Ospan課題（日本語）</title>
+  <style>
+    body { background: #eee; font-family: sans-serif; }
+    .screen { display: none; max-width: 700px; margin: 60px auto; background: #fff; border-radius: 14px; box-shadow: 0 2px 12px #aaa; padding: 38px; font-size: 1.4rem; }
+    .active { display: block; }
+    .btn { margin-top: 32px; font-size: 1.1em; padding: 12px 40px; border-radius: 8px; border: none; background: #196ee6; color: #fff; cursor: pointer; }
+    .btn:active { background: #114eb2; }
+    #mainArea { min-height: 330px; }
+    .center { text-align: center; }
+    .big { font-size: 2.4rem; font-weight: bold; letter-spacing: 8px;}
+    .yellow { background: #ffeb3b; color: #222; padding: 20px 0; border-radius: 12px; }
+    .padrow { display: flex; justify-content: center; margin-bottom: 8px;}
+    .padbtn { width: 56px; height: 56px; margin: 4px; font-size: 1.3em; border-radius: 8px; border: 1px solid #aaa; background: #fff; cursor: pointer; transition: background .2s;}
+    .padbtn:active { background: #e3e3e3;}
+    .tosmall { font-size: 1.0em;}
+    .feedback { margin-top: 36px; padding: 16px; border-radius: 10px; background: #efefef; font-size: 1.1em;}
+    .resultblock { margin: 32px 0;}
+    .score { font-size: 1.3em; font-weight: bold;}
+    #downloadResultsBtn { margin-left: 24px;}
+    label { display: block; margin-top: 18px; }
+    input[type=text] { font-size:1.1em; padding:5px 8px; border-radius:7px; border:1px solid #bbb; margin-top:6px; width:70%; }
+  </style>
+</head>
+<body>
+
+<div id="entryScreen" class="screen active">
+  <b>Ospan課題 - 参加者情報</b>
+  <form id="entryForm" class="center">
+    <label>名前（必須）<br>
+      <input type="text" id="participantName" required placeholder="氏名またはID">
+    </label>
+    <button class="btn" type="submit">はじめる</button>
+  </form>
+</div>
+
+<div id="screen1" class="screen">
+  <b>課題説明</b>
+  <p>
+    この課題では、簡単な計算の問題を解き、その後に表示される文字を記憶してもらいます。<br>
+    まずは文字を記憶する課題の練習から始めます。<br>
+    いくつかの文字が1つずつ順番に表示されます。その後、それらの文字を表示された順番通りにクリックしてください。覚えていない場合は、？を選んでも構いません。
+  </p>
+  <button class="btn" onclick="proceedPracticeLetter()">文字記憶練習を始める</button>
+</div>
+
+<div id="mainArea" class="screen center"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
