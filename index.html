@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Ospan課題（日本語）</title>
+  <title>OSPAN課題</title>
   <style>
     body { background: #eee; font-family: sans-serif; }
     .screen { display: none; max-width: 700px; margin: 60px auto; background: #fff; border-radius: 14px; box-shadow: 0 2px 12px #aaa; padding: 38px; font-size: 1.4rem; }
@@ -23,12 +23,15 @@
     #downloadResultsBtn { margin-left: 24px;}
     label { display: block; margin-top: 18px; }
     input[type=text] { font-size:1.1em; padding:5px 8px; border-radius:7px; border:1px solid #bbb; margin-top:6px; width:70%; }
+    .warning { background: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 16px; border-radius: 8px; margin: 20px 0; }
+    .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 16px; border-radius: 8px; margin: 20px 0; }
+    .timeout { background: #ffeb3b; color: #222; padding: 12px; border-radius: 8px; margin: 10px 0; font-weight: bold; }
   </style>
 </head>
 <body>
 
 <div id="entryScreen" class="screen active">
-  <b>Ospan課題 - 参加者情報</b>
+  <b>OSPAN課題 - 参加者情報</b>
   <form id="entryForm" class="center">
     <label>名前（必須）<br>
       <input type="text" id="participantName" required placeholder="氏名またはID">
