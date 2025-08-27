@@ -8,6 +8,17 @@ let sessionType = ""; // "practice_letter", "practice_math", "practice_both", "m
 let trialN = 0, totalTrials = 0, setSizes = [];
 let ospanScore = 0, lettersCorrectTotal = 0, mathCorrectTotal = 0;
 
+// 時間制限関連の変数
+let practiceMathRTs = []; // 練習試行での計算問題回答時間を記録
+let mathTimeLimit = null; // 本番での時間制限（ミリ秒）
+let currentTimer = null; // タイマーのID
+
+// 統計情報
+let totalMathAttempted = 0;
+let totalMathCorrect = 0;
+let finalMathAccuracy = 0;
+let excludedDueToAccuracy = false;
+
 // ====== 画面切り替え ======
 function showScreen(screenId) {
   document.querySelectorAll('.screen').forEach(div => div.classList.remove('active'));
@@ -32,6 +43,22 @@ document.addEventListener('DOMContentLoaded', function() {
     showScreen('screen1');
   };
 });
+
+// ====== 時間制限の計算 ======
+function calculateMathTimeLimit() {
+  if (practiceMathRTs.length === 0) return null;
+  
+  // 平均と標準偏差を計算
+  const mean = practiceMathRTs.reduce((a, b) => a + b, 0) / practiceMathRTs.length;
+  const variance = practiceMathRTs.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / practiceMathRTs.length;
+  const sd = Math.sqrt(variance);
+  
+  // 平均 + 2.5SD を時間制限とする
+  mathTimeLimit = Math.round(mean + (sd * 2.5));
+  
+  console.log(`計算問題時間制限設定: 平均=${Math.round(mean)}ms, SD=${Math.round(sd)}ms, 制限=${mathTimeLimit}ms`);
+  return mathTimeLimit;
+}
 
 // ====== 練習：文字記憶 ======
 function proceedPracticeLetter(){
@@ -108,6 +135,7 @@ function proceedPracticeMath(){
   sessionType = "practice_math";
   setSizes = [2,3]; trialN = 0; totalTrials = setSizes.length;
   trialLog = [];
+  practiceMathRTs = []; // 回答時間記録用
   showMainArea();
   practiceMathFlow();
 }
@@ -115,6 +143,8 @@ async function practiceMathFlow(){
   for(trialN=0; trialN<totalTrials; trialN++){
     await doPracticeMathTrial();
   }
+  // 時間制限を計算
+  calculateMathTimeLimit();
   showPracticeMathFeedback();
 }
 async function doPracticeMathTrial(){
@@ -126,7 +156,8 @@ async function doPracticeMathTrial(){
     trial: trialN+1,
     setSize: setSize,
     mathCorrect: [],
-    mathRT: []
+    mathRT: [],
+    mathTimeout: [] // タイムアウトを記録
   };
   mainArea.innerHTML = `<b>【計算課題練習】 試行 ${trialN+1} / ${totalTrials}（${setSize}問）</b>`;
   await sleep(600);
@@ -144,9 +175,16 @@ async function doPracticeMathTrial(){
       <button class="btn" id="truebtn">TRUE</button>
       <button class="btn" id="falsebtn">FALSE</button>`;
     let mathAns = await waitClick2('truebtn','falsebtn');
+    let rt = Math.round(t1-t0);
     let mathIsCorrect = (mathAns==="truebtn" && math.isCorrect) || (mathAns==="falsebtn" && !math.isCorrect);
+    
     trialData.mathCorrect.push(mathIsCorrect ? 1 : 0);
-    trialData.mathRT.push(Math.round(t1-t0));
+    trialData.mathRT.push(rt);
+    trialData.mathTimeout.push(0); // 練習では時間切れなし
+    
+    // 練習試行の回答時間を記録
+    practiceMathRTs.push(rt);
+    
     await sleep(400);
   }
   trialLog.push(trialData);
@@ -161,7 +199,14 @@ async function doPracticeMathTrial(){
 function showPracticeMathFeedback(){
   let sum = trialLog.reduce((a,b)=>a+b.mathCorrect.reduce((x,y)=>x+y,0),0);
   let total = trialLog.reduce((a,b)=>a+b.setSize,0);
-  mainArea.innerHTML = `<b>計算課題練習 終了</b><br>正答率：${sum}/${total}<br>
+  let avgRT = Math.round(practiceMathRTs.reduce((a,b)=>a+b,0) / practiceMathRTs.length);
+  
+  mainArea.innerHTML = `<b>計算課題練習 終了</b><br>
+    正答率：${sum}/${total}<br>
+    平均回答時間：${avgRT}ms<br>
+    <div class="warning">
+      <b>重要：</b> 本番では、計算問題に${mathTimeLimit}ms以上かかると自動的に次へ進みます。
+    </div>
     <button class="btn" onclick="proceedPracticeBoth()">課題組み合わせ練習へ</button>`;
 }
 
@@ -190,6 +235,7 @@ async function doPracticeBothTrial(){
     letters: [],
     mathCorrect: [],
     mathRT: [],
+    mathTimeout: [],
     recall: [],
     recallCorrect: 0,
     recallRT: 0
@@ -198,23 +244,14 @@ async function doPracticeBothTrial(){
   await sleep(600);
 
   for(let i=0;i<setSize;i++){
-    // 計算
+    // 計算（時間制限付き）
     let math = generateMathProblem();
-    let t0 = performance.now();
-    mainArea.innerHTML = `<div style="margin:12px 0;">計算問題を解いてください：</div>
-      <div class="big">${math.q}</div>
-      <button class="btn" id="readybtn">READY</button>`;
-    await waitClick('readybtn');
-    let t1 = performance.now();
-    mainArea.innerHTML = `<div style="margin:10px 0;">この数字は正解ですか？</div>
-      <div class="big">${math.shownAnswer}</div>
-      <button class="btn" id="truebtn">TRUE</button>
-      <button class="btn" id="falsebtn">FALSE</button>`;
-    let mathAns = await waitClick2('truebtn','falsebtn');
-    let mathIsCorrect = (mathAns==="truebtn" && math.isCorrect) || (mathAns==="falsebtn" && !math.isCorrect);
-    trialData.mathCorrect.push(mathIsCorrect ? 1 : 0);
-    trialData.mathRT.push(Math.round(t1-t0));
-    await sleep(400);
+    let mathResult = await doMathWithTimeout(math, mathTimeLimit);
+    
+    trialData.mathCorrect.push(mathResult.correct ? 1 : 0);
+    trialData.mathRT.push(mathResult.rt);
+    trialData.mathTimeout.push(mathResult.timeout ? 1 : 0);
+    
     // 文字
     let letterIdx = Math.floor(Math.random()*12);
     trialData.letters.push(letterIdx+1);
@@ -240,8 +277,10 @@ async function doPracticeBothTrial(){
   trialLog.push(trialData);
 
   let mathCorr = trialData.mathCorrect.reduce((a,b)=>a+b,0);
+  let timeouts = trialData.mathTimeout.reduce((a,b)=>a+b,0);
   mainArea.innerHTML = `<div class="feedback">
     <div>計算正答数：${mathCorr}/${setSize}　文字再生正答数：${correctCount}/${setSize}</div>
+    ${timeouts > 0 ? `<div class="timeout">時間切れ：${timeouts}回</div>` : ''}
     </div>
     <button class="btn" id="nextBothPracticeBtn">次の練習へ</button>`;
   await waitClick('nextBothPracticeBtn');
@@ -258,6 +297,7 @@ function proceedMainTask(){
   trialN = 0; totalTrials = setSizes.length;
   trialLog = [];
   ospanScore = 0; lettersCorrectTotal = 0; mathCorrectTotal = 0;
+  totalMathAttempted = 0; totalMathCorrect = 0;
   showMainArea();
   mainflow();
 }
@@ -265,6 +305,10 @@ async function mainflow(){
   for(trialN=0; trialN<totalTrials; trialN++){
     await doMainTrial();
   }
+  // 最終的な計算正答率を計算
+  finalMathAccuracy = totalMathAttempted > 0 ? (totalMathCorrect / totalMathAttempted * 100) : 0;
+  excludedDueToAccuracy = finalMathAccuracy < 85;
+  
   showResult();
 }
 async function doMainTrial() {
@@ -278,6 +322,7 @@ async function doMainTrial() {
     letters: [],
     mathCorrect: [],
     mathRT: [],
+    mathTimeout: [],
     recall: [],
     recallCorrect: 0,
     recallRT: 0
@@ -286,23 +331,18 @@ async function doMainTrial() {
   await sleep(700);
 
   for (let i=0; i<setSize; i++) {
-    // 計算
+    // 計算（時間制限付き）
     let math = generateMathProblem();
-    let t0 = performance.now();
-    mainArea.innerHTML = `<div style="margin:12px 0;">計算問題を解いてください：</div>
-      <div class="big">${math.q}</div>
-      <button class="btn" id="readybtn">READY</button>`;
-    await waitClick('readybtn');
-    let t1 = performance.now();
-    mainArea.innerHTML = `<div style="margin:10px 0;">この数字は正解ですか？</div>
-      <div class="big">${math.shownAnswer}</div>
-      <button class="btn" id="truebtn">TRUE</button>
-      <button class="btn" id="falsebtn">FALSE</button>`;
-    let mathAns = await waitClick2('truebtn','falsebtn');
-    let mathIsCorrect = (mathAns==="truebtn" && math.isCorrect) || (mathAns==="falsebtn" && !math.isCorrect);
-    trialData.mathCorrect.push(mathIsCorrect ? 1 : 0);
-    trialData.mathRT.push(Math.round(t1-t0));
-    await sleep(400);
+    let mathResult = await doMathWithTimeout(math, mathTimeLimit);
+    
+    trialData.mathCorrect.push(mathResult.correct ? 1 : 0);
+    trialData.mathRT.push(mathResult.rt);
+    trialData.mathTimeout.push(mathResult.timeout ? 1 : 0);
+    
+    // 統計更新
+    totalMathAttempted++;
+    if (mathResult.correct) totalMathCorrect++;
+    
     // 文字
     let letterIdx = Math.floor(Math.random()*12);
     trialData.letters.push(letterIdx+1);
@@ -325,7 +365,8 @@ async function doMainTrial() {
     if (trialData.recall[i] && trialData.recall[i]===trialData.letters[i]) correctCount++;
   }
   trialData.recallCorrect = correctCount;
-  // スコア加算
+  
+  // スコア加算（完全正答の場合）
   if (trialData.recallCorrect===setSize && trialData.mathCorrect.reduce((a,b)=>a*b,1)===1) {
     ospanScore += setSize;
   }
@@ -334,12 +375,85 @@ async function doMainTrial() {
   trialLog.push(trialData);
 
   let trialMathErrors = setSize - trialData.mathCorrect.reduce((a,b)=>a+b,0);
+  let timeouts = trialData.mathTimeout.reduce((a,b)=>a+b,0);
   let feed = `<div class="feedback">`
     +`<div>文字再生：${correctCount} / ${setSize} 正解</div>`
     +`<div>計算エラー：${trialMathErrors} / ${setSize}</div>`
+    + (timeouts > 0 ? `<div class="timeout">時間切れ：${timeouts}回</div>` : '')
     +`</div>`;
   mainArea.innerHTML = feed + `<button class="btn" id="nexttrialbtn">次の試行へ</button>`;
   await waitClick('nexttrialbtn');
+}
+
+// ====== 時間制限付き計算問題 ======
+function doMathWithTimeout(math, timeLimit) {
+  return new Promise(async (resolve) => {
+    let t0 = performance.now();
+    let timedOut = false;
+    let answered = false;
+    
+    mainArea.innerHTML = `<div style="margin:12px 0;">計算問題を解いてください：</div>
+      <div class="big">${math.q}</div>
+      <button class="btn" id="readybtn">READY</button>`;
+    
+    // タイムアウト処理
+    if (timeLimit) {
+      currentTimer = setTimeout(() => {
+        if (!answered) {
+          timedOut = true;
+          mainArea.innerHTML = `<div class="timeout">時間切れ！次へ進みます。</div>`;
+          setTimeout(() => {
+            resolve({ correct: false, rt: timeLimit, timeout: true });
+          }, 1000);
+        }
+      }, timeLimit);
+    }
+    
+    // READY待ち
+    await waitClickWithCondition('readybtn', () => !timedOut);
+    
+    if (timedOut) return;
+    
+    let t1 = performance.now();
+    mainArea.innerHTML = `<div style="margin:10px 0;">この数字は正解ですか？</div>
+      <div class="big">${math.shownAnswer}</div>
+      <button class="btn" id="truebtn">TRUE</button>
+      <button class="btn" id="falsebtn">FALSE</button>`;
+    
+    let mathAns = await waitClick2WithCondition('truebtn','falsebtn', () => !timedOut);
+    
+    if (timedOut) return;
+    
+    answered = true;
+    if (currentTimer) clearTimeout(currentTimer);
+    
+    let rt = Math.round(t1-t0);
+    let mathIsCorrect = (mathAns==="truebtn" && math.isCorrect) || (mathAns==="falsebtn" && !math.isCorrect);
+    
+    await sleep(400);
+    resolve({ correct: mathIsCorrect, rt: rt, timeout: false });
+  });
+}
+
+// ====== 条件付きクリック待ち ======
+function waitClickWithCondition(btnid, condition) {
+  return new Promise(r => {
+    const btn = document.getElementById(btnid);
+    if (!btn) return;
+    btn.onclick = () => {
+      if (condition()) r();
+    };
+  });
+}
+
+function waitClick2WithCondition(btn1, btn2, condition) {
+  return new Promise(r => {
+    const b1 = document.getElementById(btn1);
+    const b2 = document.getElementById(btn2);
+    if (!b1 || !b2) return;
+    b1.onclick = () => { if (condition()) r(btn1); };
+    b2.onclick = () => { if (condition()) r(btn2); };
+  });
 }
 
 // ====== 文字入力パッド ======
@@ -429,8 +543,7 @@ function showResult(){
   let totalMath = trialLog.reduce((a,b)=>a+(b.mathCorrect?b.setSize:0),0);
   let mathCorr = trialLog.reduce((a,b)=>a+(b.mathCorrect?b.mathCorrect.reduce((x,y)=>x+y,0):0),0);
   let letterCorr = trialLog.reduce((a,b)=>a+(b.recallCorrect?b.recallCorrect:0),0);
-  let nTrial = trialLog.length;
-  let ospan = trialLog.filter(b=>b.session==="main").reduce((a,b)=>a+((b.recallCorrect===b.setSize&&b.mathCorrect&&b.mathCorrect.reduce((x,y)=>x*y,1)===1)?b.setSize:0),0);
+  let totalTimeouts = trialLog.reduce((a,b)=>a+(b.mathTimeout?b.mathTimeout.reduce((x,y)=>x+y,0):0),0);
   let mathAcc = totalMath>0 ? Math.round(mathCorr/totalMath*100) : "-";
   let letterAcc = totalMath>0 ? Math.round(letterCorr/totalMath*100) : "-";
   let perfectTrials = trialLog.filter(t=>t.session==="main"&&t.recallCorrect===t.setSize&&t.mathCorrect&&t.mathCorrect.reduce((a,b)=>a*b,1)===1).length;
@@ -439,8 +552,20 @@ function showResult(){
   <div>・文字と計算の両課題が正解だった完全正答試行数：<span class="score">${perfectTrials} 回</span></div>
   <div>・計算問題の正答率：<span class="score">${mathAcc}%</span></div>
   <div>・文字列記憶の正答率：<span class="score">${letterAcc}%</span></div>
-  <div style="margin-top:18px;">（Ospanスコア：${ospan}）</div>
-  </div>
+  <div>・時間切れ回数：<span class="score">${totalTimeouts} 回</span></div>
+  <div style="margin-top:18px;">・OSPANスコア：<span class="score">${ospanScore}</span></div>`;
+  
+  // 85%閾値チェック
+  if (excludedDueToAccuracy) {
+    resHTML += `<div class="error">
+      <b>注意：</b> 計算問題の正答率が${Math.round(finalMathAccuracy)}%で、85%の基準を下回っています。
+      このデータは分析から除外される可能性があります。
+    </div>`;
+  } else {
+    resHTML += `<div style="margin-top:10px; color: green;">✓ 計算問題正答率が85%以上の基準を満たしています。</div>`;
+  }
+  
+  resHTML += `</div>
   <button class="btn" onclick="downloadResultCSV()">結果をCSVでダウンロード</button>
   <button class="btn" onclick="location.reload()">もう一度やる</button>`;
   mainArea.innerHTML = resHTML;
@@ -448,10 +573,21 @@ function showResult(){
 
 // ====== 結果CSVダウンロード ======
 function downloadResultCSV() {
-  // CSVヘッダ
+  // CSVヘッダー
   const header = [
-    "participant","datetime","session","trial","setSize","letters_sequence","math_correct_array","math_rt_array","recall_array","recall_correct","recall_rt"
+    "participant","datetime","session","trial","setSize",
+    "letters_sequence","math_correct_array","math_rt_array","math_timeout_array",
+    "recall_array","recall_correct","recall_rt",
+    "ospan_score","math_accuracy_percent","letter_accuracy_percent",
+    "math_time_limit_ms","excluded_due_to_accuracy"
   ];
+  
+  // 各試行の統計を計算
+  let mathAccuracy = totalMathAttempted > 0 ? Math.round((totalMathCorrect/totalMathAttempted)*100) : 0;
+  let letterTotal = trialLog.filter(t=>t.session==="main").reduce((a,b)=>a+b.setSize,0);
+  let letterCorrect = trialLog.filter(t=>t.session==="main").reduce((a,b)=>a+b.recallCorrect,0);
+  let letterAccuracy = letterTotal > 0 ? Math.round((letterCorrect/letterTotal)*100) : 0;
+  
   // CSVデータ
   const rows = trialLog.map(trial=>[
     trial.participant || "",
@@ -462,11 +598,30 @@ function downloadResultCSV() {
     trial.letters ? trial.letters.join("-") : "",
     trial.mathCorrect ? trial.mathCorrect.join("-") : "",
     trial.mathRT ? trial.mathRT.join("-") : "",
+    trial.mathTimeout ? trial.mathTimeout.join("-") : "",
     trial.recall ? trial.recall.map(x=>x===null?"?":x).join("-") : "",
     trial.recallCorrect || "",
-    trial.recallRT || ""
+    trial.recallRT || "",
+    // 全体統計（本番試行のみ）
+    trial.session === "main" ? ospanScore : "",
+    trial.session === "main" ? mathAccuracy : "",
+    trial.session === "main" ? letterAccuracy : "",
+    trial.session === "main" ? mathTimeLimit : "",
+    trial.session === "main" ? (excludedDueToAccuracy ? "YES" : "NO") : ""
   ]);
+  
   let csv = header.join(",") + "\n" + rows.map(r=>r.join(",")).join("\n");
+  
+  // サマリー情報を追加
+  csv += "\n\n--- SUMMARY ---\n";
+  csv += `Total OSPAN Score,${ospanScore}\n`;
+  csv += `Math Accuracy,${mathAccuracy}%\n`;
+  csv += `Letter Accuracy,${letterAccuracy}%\n`;
+  csv += `Math Time Limit,${mathTimeLimit}ms\n`;
+  csv += `Total Timeouts,${trialLog.reduce((a,b)=>a+(b.mathTimeout?b.mathTimeout.reduce((x,y)=>x+y,0):0),0)}\n`;
+  csv += `Excluded Due to Low Accuracy,${excludedDueToAccuracy ? "YES" : "NO"}\n`;
+  csv += `Perfect Trials,${trialLog.filter(t=>t.session==="main"&&t.recallCorrect===t.setSize&&t.mathCorrect&&t.mathCorrect.reduce((a,b)=>a*b,1)===1).length}\n`;
+  
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
